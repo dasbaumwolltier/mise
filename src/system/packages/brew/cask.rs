@@ -12,7 +12,8 @@ use crate::hash;
 use crate::http::HTTP_FETCH;
 use crate::result::Result;
 use crate::system::packages::{
-    InstallOpts, PackageRequest, PackageState, PackageStatus, SystemPackageManager,
+    InstallOpts, PackageInstallReason, PackageRequest, PackageState, PackageStatus,
+    SystemPackageManager,
 };
 use crate::ui::multi_progress_report::MultiProgressReport;
 use crate::ui::progress_report::{ProgressIcon, SingleReport};
@@ -130,6 +131,7 @@ impl SystemPackageManager for BrewCaskManager {
             statuses.push(PackageStatus {
                 request: req.clone(),
                 state,
+                install_reason: PackageInstallReason::Requested,
             });
         }
         Ok(statuses)

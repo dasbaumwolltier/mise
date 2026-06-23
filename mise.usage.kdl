@@ -399,6 +399,31 @@ Examples:
                 arg <TAPS>… help="Tap name(s), e.g. `owner/repo`" var=#true
             }
         }
+        cmd cleanup help="Uninstall unneeded system packages" {
+            long_help #"""
+Uninstall unneeded system packages
+
+Removes packages that are no longer requested in `[bootstrap.packages]` and
+are not dependencies of the remaining requested packages. Managers only run
+cleanup when mise has reliable ownership and dependency data for that
+package manager.
+"""#
+            after_long_help #"""
+Examples:
+
+    $ mise bootstrap packages cleanup
+    $ mise bootstrap packages cleanup --manager brew
+    $ mise bootstrap packages cleanup --dry-run
+
+"""#
+            flag "-m --manager" help="Only cleanup packages for this manager, e.g. `brew`" {
+                arg <MANAGER> {
+                    choices apk apt brew brew-cask dnf mas pacman
+                }
+            }
+            flag "-n --dry-run" help="Print the packages that would be removed without removing them"
+            flag "-y --yes" help="Skip the confirmation prompt"
+        }
         cmd install help="Install missing system packages from `[bootstrap.packages]`" {
             alias i
             long_help #"""

@@ -53,3 +53,4 @@ cat <<EOF >mise.toml
 [tools]
 EOF
 assert_succeed "mise bootstrap packages status"
+assert_succeed "mise bootstrap packages cleanup --dry-run"

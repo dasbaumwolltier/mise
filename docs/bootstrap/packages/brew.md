@@ -112,6 +112,11 @@ mise tracks what it installed in its own ledger
 prefix that it (or brew) didn't create — link conflicts fail with a list of
 the offending files rather than clobbering them.
 
+`mise bootstrap packages cleanup` uses that ledger and the brew receipts in the
+Cellar to remove mise-installed formulae that are no longer requested and are
+not needed by any remaining requested package. Formulae not recorded in mise's
+ledger are left alone.
+
 ## How pouring works
 
 For each formula in the dependency closure (dependencies first):

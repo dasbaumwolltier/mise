@@ -5,7 +5,10 @@ use std::process::Stdio;
 use async_trait::async_trait;
 use eyre::bail;
 
-use super::{InstallOpts, PackageRequest, PackageState, PackageStatus, SystemPackageManager};
+use super::{
+    InstallOpts, PackageInstallReason, PackageRequest, PackageState, PackageStatus,
+    SystemPackageManager,
+};
 use crate::result::Result;
 use crate::system::sudo;
 
@@ -68,6 +71,7 @@ fn parse_pacman_query(output: &str, requests: &[PackageRequest]) -> Vec<PackageS
             PackageStatus {
                 request: req.clone(),
                 state,
+                install_reason: PackageInstallReason::Unknown,
             }
         })
         .collect()

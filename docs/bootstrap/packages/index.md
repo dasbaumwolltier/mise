@@ -102,6 +102,10 @@ mise bootstrap packages upgrade           # upgrade installed packages to curren
 mise bootstrap packages upgrade --manager brew
 mise bootstrap packages upgrade --manager brew-cask
 mise bootstrap packages upgrade --manager mas
+
+mise bootstrap packages cleanup           # remove unneeded packages where supported
+mise bootstrap packages cleanup --dry-run # preview cleanup
+mise bootstrap packages cleanup --manager brew
 ```
 
 `mise bootstrap packages use` is `mise use` for system packages: it writes
@@ -120,6 +124,11 @@ yet are skipped — that's `mise bootstrap packages install`'s job. For brew
 this pours the formula's current bottle and replaces the old keg; for
 brew-cask this installs the current cask artifact; for mas this runs
 `mas upgrade`.
+
+`mise bootstrap packages cleanup` removes packages that are no longer requested
+and are not needed by the remaining requested packages. Cleanup only runs for
+package managers where mise has reliable ownership and dependency data;
+currently that means mise-installed `brew` formulae.
 
 `mise doctor` also reports configured system packages and warns when any are
 missing.

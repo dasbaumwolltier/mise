@@ -5,7 +5,10 @@ use async_trait::async_trait;
 use eyre::{Result as EyreResult, bail, eyre};
 use serde_json::Value;
 
-use super::{InstallOpts, PackageRequest, PackageState, PackageStatus, SystemPackageManager};
+use super::{
+    InstallOpts, PackageInstallReason, PackageRequest, PackageState, PackageStatus,
+    SystemPackageManager,
+};
 use crate::result::Result;
 
 /// Mac App Store apps via the `mas` CLI.
@@ -148,6 +151,7 @@ fn statuses_from_apps(apps: &[InstalledApp], requests: &[PackageRequest]) -> Vec
             PackageStatus {
                 request: req.clone(),
                 state,
+                install_reason: PackageInstallReason::Requested,
             }
         })
         .collect()

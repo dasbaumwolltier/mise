@@ -3,7 +3,7 @@ use serde_json::json;
 
 use crate::config::{Config, Settings};
 use crate::system;
-use crate::system::packages::PackageState;
+use crate::system::packages::{PackageInstallReason, PackageState};
 use crate::ui::table::MiseTable;
 
 /// Show the status of system packages from `[bootstrap.packages]`
@@ -72,6 +72,7 @@ impl SystemStatus {
                         "requested_version": s.request.version.clone().unwrap_or_else(|| "latest".to_string()),
                         "state": state.replace(' ', "_"),
                         "installed_version": installed_version,
+                        "install_reason": install_reason(s.install_reason),
                     }));
                 } else {
                     rows.push(vec![
@@ -108,6 +109,14 @@ impl SystemStatus {
             crate::exit(1);
         }
         Ok(())
+    }
+}
+
+fn install_reason(reason: PackageInstallReason) -> &'static str {
+    match reason {
+        PackageInstallReason::Requested => "requested",
+        PackageInstallReason::Dependency => "dependency",
+        PackageInstallReason::Unknown => "unknown",
     }
 }
 

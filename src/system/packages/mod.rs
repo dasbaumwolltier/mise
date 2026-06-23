@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use eyre::bail;
 
 use crate::result::Result;
 
@@ -55,10 +56,21 @@ pub enum PackageState {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PackageInstallReason {
+    /// The package manager knows this package was explicitly requested.
+    Requested,
+    /// The package manager knows this package was installed as a dependency.
+    Dependency,
+    /// The package manager does not expose reliable install reason data here.
+    Unknown,
+}
+
 #[derive(Debug, Clone)]
 pub struct PackageStatus {
     pub request: PackageRequest,
     pub state: PackageState,
+    pub install_reason: PackageInstallReason,
 }
 
 #[derive(Debug, Default)]
@@ -67,6 +79,20 @@ pub struct InstallOpts {
     pub dry_run: bool,
     /// force a package manager metadata refresh before installing
     pub update: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct CleanupOpts {
+    /// print what would be removed without doing it
+    pub dry_run: bool,
+    /// print dry-run output while computing cleanup candidates
+    pub show_output: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct CleanupResult {
+    pub removed: Vec<String>,
+    pub skipped: Vec<String>,
 }
 
 // `?Send`: the brew manager's source-build path drives the toolset
@@ -99,6 +125,21 @@ pub trait SystemPackageManager: Send + Sync {
     /// upgrade invocation.
     async fn upgrade(&self, pkgs: &[PackageRequest], opts: &InstallOpts) -> Result<()> {
         self.install(pkgs, opts).await
+    }
+
+    /// Remove packages that are no longer requested and are not needed by any
+    /// remaining requested package. Managers must opt in only when they can do
+    /// this without touching user-managed packages.
+    async fn cleanup(
+        &self,
+        _pkgs: &[PackageRequest],
+        _opts: &CleanupOpts,
+    ) -> Result<CleanupResult> {
+        bail!("{} does not support package cleanup", self.name())
+    }
+
+    fn supports_cleanup(&self) -> bool {
+        false
     }
 
     /// Can `install` satisfy a version pin? pacman (Arch repos only carry

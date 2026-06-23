@@ -20,13 +20,17 @@
 use async_trait::async_trait;
 use eyre::bail;
 
-use super::{InstallOpts, PackageRequest, PackageState, PackageStatus, SystemPackageManager};
+use super::{
+    CleanupOpts, CleanupResult, InstallOpts, PackageInstallReason, PackageRequest, PackageState,
+    PackageStatus, SystemPackageManager,
+};
 use crate::result::Result;
 use crate::ui::multi_progress_report::MultiProgressReport;
 use crate::ui::progress_report::{ProgressIcon, SingleReport};
 
 mod api;
 mod cask;
+mod cleanup;
 mod elf;
 mod fetch;
 mod macho;
@@ -222,6 +226,7 @@ impl SystemPackageManager for BrewManager {
         // symlink resolves to a keg — a Cellar directory without one is a
         // remnant of a failed install and must not mask a retry
         let mut statuses = Vec::with_capacity(pkgs.len());
+        let ledger = state::Ledger::load();
         for req in pkgs {
             let linked_name = if is_tapped_formula(&req.name) {
                 tapped_formula_name(&req.name)
@@ -229,6 +234,17 @@ impl SystemPackageManager for BrewManager {
                 core_formula_name(&req.name)
             };
             let version = pour::linked_version(linked_name);
+            let install_reason = ledger
+                .kegs
+                .get(linked_name)
+                .map(|entry| {
+                    if entry.on_request {
+                        PackageInstallReason::Requested
+                    } else {
+                        PackageInstallReason::Dependency
+                    }
+                })
+                .unwrap_or(PackageInstallReason::Unknown);
             let state = match version {
                 // a pin matches the keg version exactly or up to its
                 // revision suffix ("17.5" matches keg "17.5_1")
@@ -246,9 +262,18 @@ impl SystemPackageManager for BrewManager {
             statuses.push(PackageStatus {
                 request: req.clone(),
                 state,
+                install_reason,
             });
         }
         Ok(statuses)
+    }
+
+    fn supports_cleanup(&self) -> bool {
+        true
+    }
+
+    async fn cleanup(&self, pkgs: &[PackageRequest], opts: &CleanupOpts) -> Result<CleanupResult> {
+        cleanup::cleanup(pkgs, opts).await
     }
 
     async fn install(&self, pkgs: &[PackageRequest], opts: &InstallOpts) -> Result<()> {

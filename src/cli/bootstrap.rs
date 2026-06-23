@@ -6,7 +6,7 @@ use serde_json::json;
 use super::install::Install;
 use super::run;
 use super::system::driver::{self, Action, DriverOpts};
-use super::system::{install, status, upgrade, r#use};
+use super::system::{cleanup, install, status, upgrade, r#use};
 use crate::config::{self, Config, Settings};
 use crate::dirs;
 use crate::system;
@@ -111,6 +111,7 @@ struct BootstrapPackages {
 enum BootstrapPackagesCommands {
     #[cfg(unix)]
     Brew(super::system::brew::SystemBrew),
+    Cleanup(cleanup::SystemCleanup),
     Install(install::SystemInstall),
     Status(status::SystemStatus),
     Upgrade(upgrade::SystemUpgrade),
@@ -556,6 +557,7 @@ impl BootstrapPackages {
         match self.command {
             #[cfg(unix)]
             BootstrapPackagesCommands::Brew(cmd) => cmd.run().await,
+            BootstrapPackagesCommands::Cleanup(cmd) => cmd.run().await,
             BootstrapPackagesCommands::Install(cmd) => cmd.run().await,
             BootstrapPackagesCommands::Status(cmd) => cmd.run().await,
             BootstrapPackagesCommands::Upgrade(cmd) => cmd.run().await,
