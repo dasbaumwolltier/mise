@@ -15,10 +15,19 @@ use crate::ui::progress_report::SingleReport;
 
 /// directories linked from a keg into the prefix (brew's Keg::KEG_LINK_DIRECTORIES,
 /// minus etc/var which brew handles specially and we defer)
-const LINK_DIRS: &[&str] = &["bin", "sbin", "include", "lib", "share", "Frameworks"];
+pub(super) const LINK_DIRS: &[&str] = &["bin", "sbin", "include", "lib", "share", "Frameworks"];
 
 pub fn keg_path(name: &str, pkg_version: &str) -> PathBuf {
     prefix::cellar().join(name).join(pkg_version)
+}
+
+pub fn remove_formula(name: &str, version: &str) -> Result<()> {
+    let keg = keg_path(name, version);
+    unlink_keg(&keg)?;
+    crate::file::remove_all(&keg)?;
+    crate::file::remove_dir(prefix::cellar().join(name))?;
+    prefix::setup_linux_runtime()?;
+    Ok(())
 }
 
 /// is this keg fully poured and linked? Every pour ends by creating the
@@ -387,9 +396,60 @@ pub fn link_keg(name: &str, pkg_version: &str, keg_only: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn unlink_keg(keg: &Path) -> Result<Vec<PathBuf>> {
+    let prefix = prefix::prefix();
+    let keg = crate::file::desymlink_path(keg);
+    let mut removed = vec![];
+    for root in std::iter::once(prefix.join("opt"))
+        .chain(LINK_DIRS.iter().map(|link_dir| prefix.join(link_dir)))
+    {
+        if !root.exists() {
+            continue;
+        }
+        for entry in walkdir::WalkDir::new(root).follow_links(false) {
+            let entry = entry?;
+            if !entry.path().is_symlink() {
+                continue;
+            }
+            let path = entry.path();
+            let target = std::fs::read_link(path)?;
+            let resolved = crate::file::desymlink_path(&path.parent().unwrap().join(target));
+            if resolved.starts_with(&keg) {
+                crate::file::remove_file(path)?;
+                removed.push(path.to_path_buf());
+            }
+        }
+    }
+    Ok(removed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct BrewPrefixGuard {
+        previous: Option<String>,
+    }
+
+    impl BrewPrefixGuard {
+        fn set(prefix: &Path) -> Self {
+            let previous = crate::env::var("MISE_SYSTEM_BREW_PREFIX").ok();
+            crate::env::set_var("MISE_SYSTEM_BREW_PREFIX", prefix);
+            Self { previous }
+        }
+    }
+
+    impl Drop for BrewPrefixGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(previous) => crate::env::set_var("MISE_SYSTEM_BREW_PREFIX", previous),
+                None => crate::env::remove_var("MISE_SYSTEM_BREW_PREFIX"),
+            }
+        }
+    }
 
     #[test]
     fn test_relative_target() {
@@ -407,5 +467,40 @@ mod tests {
             ),
             PathBuf::from("../Cellar/jq/1.7")
         );
+    }
+
+    #[test]
+    fn unlink_keg_removes_only_symlinks_pointing_into_keg() -> Result<()> {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir()?;
+        let _guard = BrewPrefixGuard::set(tmp.path());
+        let keg = keg_path("foo", "1.0.0");
+        crate::file::create_dir_all(keg.join("bin"))?;
+        crate::file::create_dir_all(tmp.path().join("bin"))?;
+        crate::file::create_dir_all(tmp.path().join("opt"))?;
+        crate::file::create_dir_all(tmp.path().join("Cellar/bar/1.0.0/bin"))?;
+        crate::file::write(keg.join("bin/foo"), "foo")?;
+        crate::file::write(tmp.path().join("Cellar/bar/1.0.0/bin/bar"), "bar")?;
+        crate::file::make_symlink(
+            Path::new("../Cellar/foo/1.0.0"),
+            &tmp.path().join("opt/foo"),
+        )?;
+        crate::file::make_symlink(
+            Path::new("../Cellar/foo/1.0.0/bin/foo"),
+            &tmp.path().join("bin/foo"),
+        )?;
+        crate::file::make_symlink(
+            Path::new("../Cellar/bar/1.0.0/bin/bar"),
+            &tmp.path().join("bin/bar"),
+        )?;
+
+        let removed = unlink_keg(&keg)?;
+
+        assert_eq!(removed.len(), 2);
+        assert!(!tmp.path().join("opt/foo").exists());
+        assert!(!tmp.path().join("bin/foo").exists());
+        assert!(tmp.path().join("bin/bar").exists());
+        assert!(keg.exists());
+        Ok(())
     }
 }

@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use eyre::WrapErr;
 use serde::Deserialize;
@@ -42,7 +42,7 @@ pub async fn cleanup(requested: &[PackageRequest], opts: &CleanupOpts) -> Result
         if opts.dry_run && opts.show_output {
             miseprintln!("remove brew:{name}@{version}");
         } else {
-            remove_formula(&name, version)?;
+            super::pour::remove_formula(&name, version)?;
             let mut ledger = state::Ledger::load();
             ledger.kegs.remove(&name);
             ledger.save()?;
@@ -121,47 +121,6 @@ fn receipt_dependencies(keg: &Path) -> Result<BTreeSet<String>> {
         .into_iter()
         .map(|dep| dep.full_name)
         .collect())
-}
-
-fn remove_formula(name: &str, version: &str) -> Result<()> {
-    let keg = super::pour::keg_path(name, version);
-    remove_symlinks_to(&keg)?;
-    crate::file::remove_all(&keg)?;
-    crate::file::remove_dir(prefix::cellar().join(name))?;
-    prefix::setup_linux_runtime()?;
-    Ok(())
-}
-
-fn remove_symlinks_to(keg: &Path) -> Result<Vec<PathBuf>> {
-    let prefix = prefix::prefix();
-    let mut removed = vec![];
-    for root in [
-        prefix.join("opt"),
-        prefix.join("bin"),
-        prefix.join("sbin"),
-        prefix.join("include"),
-        prefix.join("lib"),
-        prefix.join("share"),
-        prefix.join("Frameworks"),
-    ] {
-        if !root.exists() {
-            continue;
-        }
-        for entry in walkdir::WalkDir::new(root).follow_links(false) {
-            let entry = entry?;
-            if !entry.file_type().is_symlink() {
-                continue;
-            }
-            let path = entry.path();
-            let target = std::fs::read_link(path)?;
-            let resolved = crate::file::desymlink_path(&path.parent().unwrap().join(target));
-            if resolved.starts_with(keg) {
-                crate::file::remove_file(path)?;
-                removed.push(path.to_path_buf());
-            }
-        }
-    }
-    Ok(removed)
 }
 
 #[cfg(test)]
